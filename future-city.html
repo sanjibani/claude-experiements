@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Futuristic 3D City</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <script type="module">
+        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+        import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+
+        // Scene setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050520);
+        scene.fog = new THREE.FogExp2(0x050520, 0.002);
+
+        // Camera setup
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 30, 100);
+        camera.lookAt(0, 0, 0);
+
+        // Renderer setup
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        // Controls
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0x404040, 2);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(1, 1, 1);
+        scene.add(directionalLight);
+
+        // City grid
+        const gridSize = 200;
+        const cellSize = 10;
+        const cityGroup = new THREE.Group();
+        scene.add(cityGroup);
+
+        // Ground plane
+        const groundGeometry = new THREE.PlaneGeometry(gridSize, gridSize);
+        const groundMaterial = new THREE.MeshStandardMaterial({
+            color: 0x111111,
+            roughness: 0.8,
+            metalness: 0.2
+        });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -0.5;
+        cityGroup.add(ground);
+
+        // Grid helper
+        const gridHelper = new THREE.GridHelper(gridSize, gridSize / cellSize, 0x0000ff, 0x404040);
+        gridHelper.position.y = -0.4;
+        cityGroup.add(gridHelper);
+
+        // Create skyscrapers
+        const createSkyscraper = (x, z, height, width, depth, color) => {
+            const geometry = new THREE.BoxGeometry(width, height, depth);
+            const material = new THREE.MeshStandardMaterial({
+                color: color,
+                roughness: 0.3,
+                metalness: 0.8,
+                transparent: true,
+                opacity: 0.9
+            });
+            const building = new THREE.Mesh(geometry, material);
+            building.position.set(x, height / 2, z);
+            cityGroup.add(building);
+
+            // Add window lights
+            const windowGeometry = new THREE.PlaneGeometry(width - 0.5, height - 0.5);
+            const windowMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffff99,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.2,
+                emissive: 0xffff99,
+                emissiveIntensity: 0.5
+            });
+
+            // Add windows on all four sides
+            const directions = [
+                { rotation: [0, 0, 0], position: [0, 0, depth / 2 + 0.01] },
+                { rotation: [0, Math.PI, 0], position: [0, 0, -depth / 2 - 0.01] },
+                { rotation: [0, Math.PI / 2, 0], position: [width / 2 + 0.01, 0, 0] },
+                { rotation: [0, -Math.PI / 2, 0], position: [-width / 2 - 0.01, 0, 0] }
+            ];
+
+            directions.forEach(dir => {
+                const windows = new THREE.Mesh(windowGeometry, windowMaterial);
+                windows.rotation.set(...dir.rotation);
+                windows.position.set(...dir.position);
+                building.add(windows);
+            });
+
+            // Add top antenna or spire for taller buildings
+            if (height > 30) {
+                const antennaGeometry = new THREE.CylinderGeometry(0.2, 0.2, height * 0.2, 8);
+                const antennaMaterial = new THREE.MeshStandardMaterial({
+                    color: 0xaaaaaa,
+                    metalness: 1.0,
+                    roughness: 0.2
+                });
+                const antenna = new THREE.Mesh(antennaGeometry, antennaMaterial);
+                antenna.position.y = height / 2 + height * 0.1;
+                building.add(antenna);
+            }
+
+            return building;
+        };
+
+        // Create highways
+        const createHighway = (startX, startZ, endX, endZ, height) => {
+            const length = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endZ - startZ, 2));
+            const geometry = new THREE.BoxGeometry(length, 0.5, 6);
+            const material = new THREE.MeshStandardMaterial({
+                color: 0x333333,
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            const highway = new THREE.Mesh(geometry, material);
+            
+            // Position at the midpoint
+            highway.position.set((startX + endX) / 2, height, (startZ + endZ) / 2);
+            
+            // Rotate to connect the points
+            const angle = Math.atan2(endZ - startZ, endX - startX);
+            highway.rotation.y = angle;
+            
+            cityGroup.add(highway);
+
+            // Add lane markings
+            const markingGeometry = new THREE.PlaneGeometry(length - 1, 0.3);
+            const markingMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffff00,
+                side: THREE.DoubleSide
+            });
+            const markings = new THREE.Mesh(markingGeometry, markingMaterial);
+            markings.rotation.x = Math.PI / 2;
+            markings.position.y = 0.26;
+            highway.add(markings);
+
+            // Add supports
+            const supportGeometry = new THREE.CylinderGeometry(0.5, 0.5, height, 8);
+            const supportMaterial = new THREE.MeshStandardMaterial({
+                color: 0x999999,
+                roughness: 0.7,
+                metalness: 0.3
+            });
+
+            // Add supports every 20 units
+            const supportCount = Math.floor(length / 20) + 1;
+            for (let i = 0; i < supportCount; i++) {
+                const support = new THREE.Mesh(supportGeometry, supportMaterial);
+                const supportPos = -length / 2 + i * (length / (supportCount - 1));
+                support.position.set(supportPos, -height / 2, 0);
+                highway.add(support);
+            }
+
+            return highway;
+        };
+
+        // Create plants (both trees and smaller vegetation)
+        const createPlant = (x, z, size, type) => {
+            const group = new THREE.Group();
+            group.position.set(x, 0, z);
+
+            if (type === 'tree') {
+                // Tree trunk
+                const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.7, size * 3, 8);
+                const trunkMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x8B4513,
+                    roughness: 0.9,
+                    metalness: 0.1
+                });
+                const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+                trunk.position.y = size * 1.5;
+                group.add(trunk);
+
+                // Tree foliage
+                const foliageGeometry = new THREE.ConeGeometry(size * 2, size * 4, 8);
+                const foliageMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x00AA00,
+                    roughness: 0.8,
+                    metalness: 0.1
+                });
+                const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
+                foliage.position.y = size * 4;
+                group.add(foliage);
+            } else {
+                // Futuristic plant pod
+                const podGeometry = new THREE.SphereGeometry(size, 8, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+                const podMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x228B22,
+                    roughness: 0.7,
+                    metalness: 0.3,
+                    transparent: true,
+                    opacity: 0.9
+                });
+                const pod = new THREE.Mesh(podGeometry, podMaterial);
+                pod.position.y = size / 2;
+                group.add(pod);
+
+                // Plant stalks
+                const stalkCount = Math.floor(Math.random() * 5) + 3;
+                for (let i = 0; i < stalkCount; i++) {
+                    const stalkGeometry = new THREE.CylinderGeometry(0.1, 0.1, size * 3, 8);
+                    const stalkMaterial = new THREE.MeshStandardMaterial({
+                        color: 0x00FF00,
+                        roughness: 0.8,
+                        metalness: 0.2
+                    });
+                    const stalk = new THREE.Mesh(stalkGeometry, stalkMaterial);
+                    
+                    const angle = (i / stalkCount) * Math.PI * 2;
+                    const radius = size * 0.5;
+                    stalk.position.set(
+                        Math.cos(angle) * radius,
+                        size * 1.5,
+                        Math.sin(angle) * radius
+                    );
+                    
+                    stalk.rotation.x = Math.random() * 0.5;
+                    stalk.rotation.z = Math.random() * 0.5;
+                    group.add(stalk);
+                }
+            }
+
+            cityGroup.add(group);
+            return group;
+        };
+
+        // Generate city layout
+        const buildings = [];
+        const highways = [];
+        const plants = [];
+
+        // Create skyscrapers in a downtown area
+        for (let i = 0; i < 50; i++) {
+            const x = (Math.random() - 0.5) * gridSize * 0.7;
+            const z = (Math.random() - 0.5) * gridSize * 0.7;
+            const height = Math.random() * 50 + 20;
+            const width = Math.random() * 10 + 5;
+            const depth = Math.random() * 10 + 5;
+            
+            // Generate futuristic colors
+            const colors = [0x0077ff, 0x00ffff, 0xff00ff, 0x5555ff, 0x00aaaa];
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            
+            buildings.push(createSkyscraper(x, z, height, width, depth, color));
+        }
+
+        // Create highways connecting areas
+        const highwayPoints = [
+            [-80, -80], [80, -80], [80, 80], [-80, 80],
+            [-40, -40], [40, -40], [40, 40], [-40, 40],
+            [0, -80], [0, 80], [-80, 0], [80, 0]
+        ];
+
+        for (let i = 0; i < highwayPoints.length - 1; i++) {
+            const [startX, startZ] = highwayPoints[i];
+            const [endX, endZ] = highwayPoints[i + 1];
+            const height = Math.random() * 5 + 10;
+            highways.push(createHighway(startX, startZ, endX, endZ, height));
+        }
+
+        // Create circular highways
+        const centerX = 0;
+        const centerZ = 0;
+        const radius = 60;
+        const segments = 16;
+        
+        for (let i = 0; i < segments; i++) {
+            const startAngle = (i / segments) * Math.PI * 2;
+            const endAngle = ((i + 1) / segments) * Math.PI * 2;
+            
+            const startX = centerX + Math.cos(startAngle) * radius;
+            const startZ = centerZ + Math.sin(startAngle) * radius;
+            const endX = centerX + Math.cos(endAngle) * radius;
+            const endZ = centerZ + Math.sin(endAngle) * radius;
+            
+            highways.push(createHighway(startX, startZ, endX, endZ, 15));
+        }
+
+        // Create plants in green zones
+        for (let i = 0; i < 200; i++) {
+            // Keep plants away from the center
+            let x, z;
+            do {
+                x = (Math.random() - 0.5) * gridSize * 0.9;
+                z = (Math.random() - 0.5) * gridSize * 0.9;
+            } while (Math.sqrt(x * x + z * z) < 30);
+
+            const size = Math.random() * 2 + 1;
+            const type = Math.random() > 0.7 ? 'tree' : 'plant';
+            
+            plants.push(createPlant(x, z, size, type));
+        }
+
+        // Animation
+        const clock = new THREE.Clock();
+
+        const animate = () => {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+
+            // Update controls
+            controls.update();
+
+            // Rotate the entire city slowly
+            cityGroup.rotation.y += delta * 0.05;
+
+            // Add some movement to plants
+            plants.forEach((plant, i) => {
+                const time = Date.now() * 0.001;
+                const offset = i * 0.1;
+                plant.position.y = Math.sin(time + offset) * 0.2;
+            });
+
+            renderer.render(scene, camera);
+        };
+
+        animate();
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
