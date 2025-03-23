@@ -1,0 +1,211 @@
+# Install necessary packages
+!pip install crewai langchain-anthropic langchain langchain-community python-dotenv tavily-python
+
+# Import required libraries
+import os
+from langchain_anthropic import ChatAnthropic
+from crewai import Agent, Task, Crew, Process
+from langchain.tools import Tool
+from crewai.tools import SerpAPITool
+from tavily import TavilyClient
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Set up API keys
+ANTHROPIC_API_KEY = "your_anthropic_api_key"  # Replace with your actual API key
+TAVILY_API_KEY = "your_tavily_api_key"  # Replace with your actual API key
+
+os.environ["ANTHROPIC_API_KEY"] = ANTHROPIC_API_KEY
+os.environ["TAVILY_API_KEY"] = TAVILY_API_KEY
+
+# Create custom web search tool with Tavily
+tavily_client = TavilyClient(api_key=TAVILY_API_KEY)
+
+def tavily_search(query):
+    """Search the web using Tavily API."""
+    search_result = tavily_client.search(query=query, search_depth="advanced", include_answer=True, include_images=False, max_results=5)
+    return search_result
+
+tavily_tool = Tool(
+    name="Web Search",
+    func=tavily_search,
+    description="Useful for searching for recent AI innovation news and research papers."
+)
+
+# Create a Claude model instance
+claude_model = ChatAnthropic(model="claude-3-7-sonnet-20250219", temperature=0.7)
+
+# Define the research agent with enhanced capabilities
+research_agent = Agent(
+    role="AI Innovation Researcher",
+    goal="Research and analyze the latest AI innovations from the past week and provide technical implementation examples",
+    backstory="""You are an expert AI researcher specializing in tracking cutting-edge AI developments. 
+    With a PhD in Machine Learning and experience at top research labs, you can quickly identify 
+    significant innovations and understand their technical details. You're skilled at explaining 
+    complex concepts and can provide implementation examples that demonstrate practical applications.""",
+    verbose=True,
+    allow_delegation=True,
+    tools=[tavily_tool],
+    llm=claude_model
+)
+
+# Define the technical writer agent with improved prompt
+technical_writer = Agent(
+    role="Technical AI Content Developer",
+    goal="Create detailed technical explanations and implementation examples for recent AI innovations",
+    backstory="""You are a technical writer with expertise in AI and programming. You have written 
+    documentation for major AI frameworks and have a talent for explaining complex technical 
+    concepts with clarity. You can create code examples that demonstrate how new AI technologies 
+    work. You prioritize accuracy and technical depth while ensuring explanations are accessible 
+    to developers and AI practitioners.""",
+    verbose=True,
+    allow_delegation=True,
+    tools=[tavily_tool],
+    llm=claude_model
+)
+
+# Define the content creator agent
+content_creator = Agent(
+    role="AI Content Creator",
+    goal="Transform technical AI research into engaging, concise, and fun content for a broader audience",
+    backstory="""You are a talented content creator who specializes in making complex technical 
+    subjects accessible and interesting. With a background in science communication, you know 
+    how to balance accuracy with engagement. You've written viral articles about AI that have 
+    reached millions of readers. You know how to use analogies, storytelling, and clear 
+    explanations to make technical content engaging without sacrificing accuracy.""",
+    verbose=True,
+    allow_delegation=True,
+    llm=claude_model
+)
+
+# Define the social media agent
+social_media_agent = Agent(
+    role="LinkedIn Content Strategist",
+    goal="Create and optimize LinkedIn posts about AI innovations that will engage professionals in the tech industry",
+    backstory="""You are a social media expert who has helped tech influencers grow their LinkedIn 
+    presence. You understand the LinkedIn algorithm and know how to create posts that generate 
+    high engagement. You're familiar with the preferences of the tech and AI community on LinkedIn 
+    and know how to format posts to maximize visibility and interaction. You've helped content 
+    go viral by crafting compelling hooks and strategic calls to action.""",
+    verbose=True,
+    allow_delegation=True,
+    llm=claude_model
+)
+
+# Define the initial research task
+initial_research_task = Task(
+    description="""
+    Research the most significant AI innovations announced or published in the past week. Focus on:
+    1. New models or architectures (e.g., new foundation models, transformers variants, etc.)
+    2. Breakthrough research papers from major conferences or labs
+    3. New tools, libraries, or frameworks released by companies or open source communities
+    4. Novel applications of AI in different domains
+    
+    For each innovation (find at least 3-4 major ones):
+    - Identify the name, creators/organizations, and when it was announced
+    - Understand the key technical contributions or improvements
+    - Determine what problem it solves or what capabilities it enhances
+    - Find any available metrics or benchmarks showing its performance
+    
+    Provide links to original sources, research papers, GitHub repositories, or company announcements.
+    Create a structured report organizing these innovations by category and significance.
+    """,
+    agent=research_agent,
+    expected_output="A comprehensive list of recent AI innovations with basic technical details and sources."
+)
+
+# Define the technical analysis task
+technical_analysis_task = Task(
+    description="""
+    Take the research on recent AI innovations and develop detailed technical explanations with implementation examples.
+    
+    For each innovation identified:
+    1. Explain the technical mechanisms behind how it works (architectures, algorithms, approaches)
+    2. Show concrete implementation examples with code or pseudocode (actual Python or framework-specific code is ideal)
+    3. Explain what problems it solves and how it improves upon previous approaches
+    4. Discuss potential applications and use cases for developers and researchers
+    5. Note any limitations, challenges, or open questions
+    
+    Your output should be technically rigorous enough that a developer or AI practitioner could understand 
+    how to start implementing or using these innovations. Include code snippets, architecture diagrams 
+    (described in text), and references to relevant APIs, libraries, or papers.
+    """,
+    agent=technical_writer,
+    context=[initial_research_task],
+    expected_output="Detailed technical explanations with implementation examples for each AI innovation."
+)
+
+# Define the content creation task
+content_creation_task = Task(
+    description="""
+    Transform the technical research and analysis into engaging, accessible content for a broader audience 
+    interested in AI innovation.
+    
+    Your task is to:
+    1. Create a cohesive narrative that connects the different innovations in an interesting way
+    2. Explain technical concepts in simple, relatable terms using analogies and real-world examples
+    3. Highlight the most exciting implications and potential impacts of these innovations
+    4. Add engaging elements like "why this matters," fun facts, or thought-provoking questions
+    5. Organize the content with clear sections, subheadings, and a logical flow
+    6. Keep technical accuracy while making the content fun and interesting to read
+    
+    Your output should be educational and exciting for someone with basic AI knowledge. They should 
+    finish reading feeling like they've learned something interesting and want to learn more.
+    
+    Format the content as a polished article that's ready for publication.
+    """,
+    agent=content_creator,
+    context=[initial_research_task, technical_analysis_task],
+    expected_output="An engaging, accessible article about recent AI innovations that's both educational and entertaining."
+)
+
+# Define the LinkedIn posting task
+linkedin_posting_task = Task(
+    description="""
+    Create an optimized LinkedIn post based on the engaging AI content.
+    
+    Your task is to:
+    1. Craft a compelling hook in the first 1-2 lines that will grab attention in the LinkedIn feed
+    2. Format the content specifically for LinkedIn's platform (using appropriate paragraph breaks, line spacing, emojis)
+    3. Include 5-7 relevant hashtags that will increase visibility within the AI/tech community
+    4. Add strategic engagement prompts (questions, calls for opinions) to encourage comments
+    5. Ensure the most important and interesting information appears before the "see more" cut-off (about 3 lines)
+    6. Keep the overall length appropriate for LinkedIn (ideally 1200-1500 characters)
+    7. End with a clear call-to-action that encourages sharing or continued conversation
+    
+    Your final output should be ready to copy and paste directly to LinkedIn as a post. 
+    The post should maintain a professional tone while being interesting enough to stand out 
+    in a busy feed. Optimize for both engagement and providing valuable information.
+    """,
+    agent=social_media_agent,
+    context=[content_creation_task],
+    expected_output="A complete, ready-to-post LinkedIn post about recent AI innovations that's optimized for engagement."
+)
+
+# Create the crew with improved process
+ai_news_crew = Crew(
+    agents=[research_agent, technical_writer, content_creator, social_media_agent],
+    tasks=[initial_research_task, technical_analysis_task, content_creation_task, linkedin_posting_task],
+    verbose=2,
+    process=Process.sequential  # Tasks will be executed in sequence
+)
+
+# Run the crew
+result = ai_news_crew.kickoff()
+
+print("\n======== FINAL RESULT ========\n")
+print(result)
+
+# Save the output to files for easy access
+with open("ai_innovations_technical_report.md", "w") as f:
+    f.write(technical_analysis_task.output)
+
+with open("ai_innovations_article.md", "w") as f:
+    f.write(content_creation_task.output)
+
+with open("linkedin_post.txt", "w") as f:
+    f.write(linkedin_posting_task.output)
+
+print("\nOutputs have been saved to separate files for your convenience.")
